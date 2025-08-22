@@ -6,7 +6,12 @@ export const register = async (req, res) => {
   const exists = await User.findOne({ email });
   if (exists) return res.status(400).json({ message: "Email already in use" });
 
-  const user = await User.create({ name, email, password, role, doctor: doctor || null });
+  const user = await User.create({
+  name: req.body.name,
+  email: req.body.email,
+  password: req.body.password,
+  role: "patient"
+});
   const token = signToken({ id: user._id, role: user.role });
   res.status(201).json({ token, user: { id: user._id, name, email, role, doctor: user.doctor } });
 };

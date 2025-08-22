@@ -1,36 +1,37 @@
 # MedPharma — Backend
 
-This README describes the backend I built for the MedPharma . It explains what the system does, how it works, what is implemented, and how to run and test it.
+This README documents the current backend for the MedPharma assignment. It reflects the implementation completed during development: authentication, secure admin onboarding, appointment & doctor management, queue logic, and real‑time notifications.
 
 ---
 
-## Project summary — problem we solve
+## Project goal
 
-Patients book online consultations. Once booked they need clear visibility about:
+Provide a backend that allows patients to book online consultations and gives them live visibility of:
 
-* Their position in the queue.
-* Estimated waiting time.
-* Whether the doctor is running late.
-* When it is their turn to join the call.
+* their position in the queue;
+* an estimated waiting time (ETA);
+* whether the doctor is running late;
+* when it is their turn to join the call.
 
-This backend provides REST APIs, authentication, and real-time channels to deliver those features.
+The backend exposes REST APIs, enforces authentication and validation, computes queues, and broadcasts real‑time events through Socket.IO.
 
 ---
 
-## High-level solution
+## High-level design
 
-Here's how it works in one line:
-
-* Users sign up and log in. Patients create appointments for a doctor. The backend stores appointments and computes the queue for each doctor. When appointments or doctor status change, the server broadcasts updates over Socket.IO so clients get live queue position, ETA, and turn alerts.
+* **Clients (mobile/web)** interact with the Express REST API for CRUD and use Socket.IO to subscribe to real‑time updates.
+* **MongoDB Atlas (Mongoose)** stores users, doctors, appointments, and invites.
+* **Socket.IO** runs in the same process, using rooms for `doctor:{id}` and `appointment:{id}`.
+* Controllers emit broadcasts **after** DB writes so events reflect committed state.
 
 Architecture (simplified):
 
 ```
-Mobile / Web Client <----HTTPS----> Express API (REST)
-                      \                 |
-                       \--Socket.IO----> Socket Server (same process)
+Client (Web/Mobile)
+  ├─ HTTPS REST API ──> Express (auth, CRUD, queue endpoints)
+  └─ WebSocket (Socket.IO) ──> receive queue:state / queue:update / turn:now
 
-Express API <----> MongoDB Atlas (Mongoose)
+Express API <──> MongoDB Atlas (Mongoose)
 ```
 
 ---
@@ -40,242 +41,276 @@ Express API <----> MongoDB Atlas (Mongoose)
 * Node.js (ESM)
 * Express
 * MongoDB Atlas (Mongoose)
-* Socket.IO for real-time events
-* Joi for request validation
-* bcryptjs + jsonwebtoken for auth
-* nodemon for development
+* Socket.IO (real-time)
+* Joi (input validation)
+* bcryptjs + jsonwebtoken (auth)
+* nodemon (development)
 
 ---
 
-## What is implemented (status)
+## What’s implemented (current status)
 
-**Done:**
+**Core features implemented:**
 
-* Project structure (config, models, controllers, routes, sockets, utils).
-* MongoDB connection and `.env` support.
-* Models:
-
-  * `User` (with password hashing).
-  * `Doctor` (name, email, phone, availability, avgConsultMinutes, isRunningLate, lateByMinutes).
-  * `Appointment` (patient ref, patient info, doctor ref, date, reason, status).
+* Project structure and modular code layout. ✅
+* MongoDB connection via `src/config/db.js`. ✅
+* Models: `User`, `Doctor`, `Appointment`, `Invite`. ✅
 * Authentication:
 
-  * Register, login, `me` endpoint.
-  * JWT token generation and verify middleware (`protect`).
-  * Role-based middleware (`authorize`).
-* Validation with Joi for auth, doctor, appointment inputs.
-* Appointment endpoints (create, list, update status, get user appointments).
-* Doctor endpoints (CRUD, status patch).
-* Queue utilities (`getQueueForDoctor`, `estimateForAppointment`) to compute positions and ETAs.
-* Socket.IO helpers (`initIO`, `getIO`) and `queueSocket` subscribe/rooms pattern.
-* Real-time broadcast calls added in controllers after DB changes.
-* README and API quick docs.
+  * Patient registration (public) — forced to `role: patient`. ✅
+  * Login and `GET /api/auth/me`. ✅
+  * JWT token issuance and `protect` middleware. ✅
+  * `authorize` middleware for role-based access. ✅
+* Admin onboarding:
 
-**Pending / Optional:**
+  * One‑time `scripts/seedAdmin.js` to create the initial admin. ✅
+  * Invite flow: `Invite` model and endpoints for admins to create single‑use, expiring invite tokens. ✅
+* Doctor management: CRUD and `PATCH /api/doctors/:id/status` to set `isRunningLate`, `lateByMinutes`, and `avgConsultMinutes`. ✅
+* Appointment management: create (patient-bound), list, update status, and admin/doctor views. ✅
+* Queue utilities: `getQueueForDoctor()` and `estimateForAppointment()` used to compute position and ETA. ✅
+* Real‑time: `src/sockets/io.js` and `src/sockets/queueSocket.js` plus broadcasts from controllers after DB changes. ✅
+* Joi validation for request bodies and a generic validator middleware. ✅
+* README, API summary, and operational/security notes. ✅
 
-* Full Postman collection (can be added).
-* Swagger UI (optional).
-* Advanced production features: refresh tokens, rate-limiting, request throttling, logging/monitoring, and more tests.
+**Optional / future improvements:**
 
----
-
-## Key files (quick map)
-
-* `src/index.js` — app entry and socket init.
-* `src/config/db.js` — MongoDB connection.
-* `src/models/User.js` — user schema and password hashing.
-* `src/models/Doctor.js` — doctor schema.
-* `src/models/Appointment.js` — appointment schema.
-* `src/controllers/authController.js` — register/login/me.
-* `src/controllers/appointmentController.js` — create/update appointments.
-* `src/controllers/doctorController.js` — doctor operations.
-* `src/routes/auth.js`, `src/routes/appointments.js`, `src/routes/doctors.js`, `src/routes/queue.js` — routers.
-* `src/middleware/auth.js` — `protect`, `authorize`.
-* `src/middleware/validate.js` — Joi wrapper.
-* `src/validations/*.js` — Joi schemas.
-* `src/utils/estimateWait.js` — queue and ETA logic.
-* `src/sockets/io.js` — init/get IO.
-* `src/sockets/queueSocket.js` — subscribe/unsubscribe handlers.
+* Postman collection & Newman CI (recommended).
+* Swagger/OpenAPI documentation.
+* Refresh tokens, MFA, SSO/SCIM for enterprise admin management.
+* Production logging & monitoring, rate limiting.
 
 ---
 
-## API — important endpoints
+## File map (key files)
 
-Base URL: `http://localhost:5000/api`
+```
+src/
+  config/db.js
+  index.js
+  models/
+    User.js
+    Doctor.js
+    Appointment.js
+    Invite.js
+  controllers/
+    authController.js
+    authInviteController.js
+    doctorController.js
+    appointmentController.js
+    inviteController.js
+  routes/
+    auth.js
+    doctors.js
+    appointments.js
+    admin.js
+    queue.js
+  middleware/
+    auth.js        # protect + authorize
+    validate.js    # Joi wrapper
+  validations/
+    authValidation.js
+    doctorValidation.js
+    appointmentValidation.js
+  sockets/
+    io.js
+    queueSocket.js
+  utils/
+    estimateWait.js
+scripts/
+  seedAdmin.js
 
-**Auth**
-
-* `POST /api/auth/register`
-
-  * Body: `{ name, email, password, role? }`
-  * Response: `{ token, user }`
-
-* `POST /api/auth/login`
-
-  * Body: `{ email, password }`
-  * Response: `{ token, user }`
-
-* `GET /api/auth/me` (protected)
-
-  * Header: `Authorization: Bearer <token>`
-  * Response: current user object
-
-**Doctors**
-
-* `GET /api/doctors` — list all doctors
-* `POST /api/doctors` — create doctor (admin)
-* `GET /api/doctors/:id` — doctor detail
-* `PUT /api/doctors/:id` — update doctor (admin)
-* `PATCH /api/doctors/:id/status` — update status fields (admin)
-* `DELETE /api/doctors/:id` — delete doctor (admin)
-
-**Appointments**
-
-* `POST /api/appointments` — create appointment (protected patient)
-
-  * Body: `{ patientName, patientEmail, patientPhone, doctor, date, reason? }`
-
-* `GET /api/appointments/my` — list appointments for logged-in user
-
-* `GET /api/appointments/doctor/:doctorId` — get doctor's queue (doctor/admin)
-
-* `GET /api/appointments` — admin view
-
-* `PATCH /api/appointments/:id/status` — change status (cancel, confirm, complete)
-
-**Queue**
-
-* `GET /api/queue/doctor/:doctorId` — current queue list
-* `GET /api/queue/appointment/:id/position` — position & ETA for one appointment
-
----
-
-## Socket.IO — events and payloads
-
-**Client → Server**
-
-* `queue:subscribe` `{ doctorId?, appointmentId? }` — join rooms. Server replies with current state.
-* `queue:unsubscribe` `{ doctorId?, appointmentId? }` — leave rooms.
-
-**Server → Client**
-
-* `queue:state` `{ doctorId, list }` — full queue (list of appointments sorted by date).
-* `queue:update` `{ appointmentId, position, etaMinutes }` — updated ETA/position for a single appointment.
-* `turn:now` `{ appointmentId, joinUrl }` — signal to patient that it's their turn.
-* `doctor:status` `{ doctorId, isRunningLate, lateByMinutes }` — doctor status message.
-
-Rooms used:
-
-* `doctor:{doctorId}` — broadcasts for a doctor's whole queue.
-* `appointment:{appointmentId}` — targeted broadcasts for one appointment.
-
----
-
-## Wait time and position calculation (rules)
-
-* Queue for a doctor is derived from appointments with status `pending` or `confirmed` and sorted by `date`.
-* Position for an appointment = number of appointments with earlier `date` in that queue.
-* ETA = `position * avgConsultMinutes + doctor.lateByMinutes`.
-
-  * `avgConsultMinutes` is stored on the doctor document. Default is 12 minutes.
-  * `doctor.lateByMinutes` is added when doctor marks themself late.
-
-This method is simple and deterministic. It is transparent and easy to explain to users.
-
----
-
-## Security & best practices implemented
-
-* Passwords are hashed with bcrypt.
-* JWT tokens sign user id and role. Token expiry is configurable via `.env`.
-* Validation applied to incoming data via Joi.
-* CORS is set to `CLIENT_ORIGIN` from `.env`.
-* `.env` and `node_modules/` are ignored in `.gitignore`.
-
-Notes for production:
-
-* Use refresh tokens and short access tokens.
-* Store secrets in a secret manager (AWS Secrets Manager, Azure Key Vault, etc.).
-* Enforce HTTPS and HSTS.
-* Add rate-limiting and request throttling.
-
----
-
-## Dev setup — run locally
-
-1. Clone repo and install:
-
-```bash
-git clone <your-repo>
-cd medpharma-backend
-npm install
+README.md
+.env.example
 ```
 
-2. Create `.env` at project root with:
+---
+
+## Environment variables
+
+Create a `.env` at the project root (do not commit). Required keys:
 
 ```
 PORT=5000
-MONGO_URI=<your-mongo-atlas-connection-string>
-JWT_SECRET=<generate-a-strong-secret>
+MONGO_URI=mongodb+srv://<user>:<password>@cluster0.../medpharma
+JWT_SECRET=<strong-random-secret>
 JWT_EXPIRES_IN=7d
 CLIENT_ORIGIN=http://localhost:3000
 ```
 
-3. Start the server in dev:
+Optional keys for seed script:
+
+```
+SEED_ADMIN_EMAIL=admin@example.com
+SEED_ADMIN_PASSWORD=ChangeThisNow!
+```
+
+Generate a secure `JWT_SECRET` locally:
 
 ```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+---
+
+## Run locally (development)
+
+```bash
+# install deps
+npm install
+
+# dev server
 npm run dev
 ```
 
-4. Confirm the server is up:
+Verify:
 
-* `GET http://localhost:5000/` should return `{"message":"MedPharma API is running..."}`
-* Check `MongoDB connected` in logs.
-
----
-
-## Quick Postman test flow
-
-1. **Register** a patient:
-
-```
-POST /api/auth/register
-Body: {"name":"Test","email":"test@example.com","password":"secret123"}
-```
-
-2. **Login** to get token.
-
-3. **Create a doctor** (use admin token or create a doctor user then attach doctor role).
-
-4. **Create appointments** using patient token. Use the doctor `_id` from step 3.
-
-5. **Subscribe** to socket rooms from a Socket.IO client and observe `queue:state` and `queue:update` when appointments are created or status changes.
+* `GET http://localhost:5000/` → `{ "message": "MedPharma API is running..." }`
+* Server logs show `MongoDB connected` when DB is available.
 
 ---
 
-## Deployment notes
+## Important API endpoints (summary)
 
-* Use MongoDB Atlas for production DB.
-* Set `MONGO_URI` and `JWT_SECRET` in environment variables on the host.
-* For Socket.IO, use sticky sessions if you scale to multiple instances (or use a message broker like Redis for Pub/Sub).
-* Deploy to Render, Railway, Heroku, or any node host. Set `CLIENT_ORIGIN` accordingly.
+Base URL: `http://localhost:<PORT>/api`
+
+### Auth
+
+* `POST /api/auth/register` — register **patient** (public). Requests cannot create admin directly.
+
+  * Body: `{ name, email, password }`
+* `POST /api/auth/login` — login returns `{ token, user }`.
+* `GET /api/auth/me` — protected: returns current user.
+* `POST /api/auth/register/invite` — register using an **invite token** (creates admin/doctor as invited).
+
+### Admin (protected)
+
+* `POST /api/admin/invites` — create an invite token (admin only).
+
+### Doctors
+
+* `GET /api/doctors`
+* `POST /api/doctors` — create doctor (admin)
+* `GET /api/doctors/:id`
+* `PUT /api/doctors/:id` — update doctor (admin)
+* `PATCH /api/doctors/:id/status` — update `isRunningLate`, `lateByMinutes`, `avgConsultMinutes` (admin)
+* `DELETE /api/doctors/:id` — delete doctor (admin)
+
+### Appointments
+
+* `POST /api/appointments` — create appointment (protected patient)
+
+  * Body: `{ patientName, patientEmail, patientPhone, doctor, date, reason? }`
+* `GET /api/appointments/my` — list appointments for logged-in patient
+* `GET /api/appointments/doctor/:doctorId` — get doctor's queue (doctor/admin)
+* `PATCH /api/appointments/:id/status` — update status (cancel, confirm, complete)
+* `GET /api/appointments` — admin view of all appointments
+
+### Queue
+
+* `GET /api/queue/doctor/:doctorId` — current queue list
+* `GET /api/queue/appointment/:id/position` — position & ETA for an appointment
 
 ---
 
-## Troubleshooting
+## Socket.IO events and payloads
 
-* `MongoDB connection error` → check `MONGO_URI` and IP access in Atlas.
-* `Invalid token` → ensure `JWT_SECRET` matches the signing secret and system time is correct.
-* Socket not connecting → check CORS and `CLIENT_ORIGIN`. Verify that the client uses the same protocol and host.
+**Client → Server**
+
+* `queue:subscribe` `{ doctorId?, appointmentId? }` — join rooms; server responds with current state.
+* `queue:unsubscribe` `{ doctorId?, appointmentId? }` — leave rooms.
+
+**Server → Client**
+
+* `queue:state` `{ doctorId, list }` — full queue list for the doctor.
+* `queue:update` `{ appointmentId, position, etaMinutes }` — single appointment update.
+* `turn:now` `{ appointmentId, joinUrl }` — prompt patient to join the call.
+* `doctor:status` `{ doctorId, isRunningLate, lateByMinutes }` — doctor status broadcast.
+
+Rooms:
+
+* `doctor:{doctorId}` — broadcasts for a doctor's queue.
+* `appointment:{appointmentId}` — targeted broadcasts for a single appointment.
 
 ---
 
-## Next steps & improvements
+## Queue & ETA calculation rules
 
-* Add refresh tokens and a refresh flow.
-* Add tests (unit + integration) and a CI workflow.
-* Add Postman collection and Swagger UI.
-* Implement notification delivery (email/push/SMS) for `turn:now`.
+* Queue = appointments with `status` in \[`pending`, `confirmed`], sorted ascending by `date`.
+* Position = number of appointments with an earlier `date` in that queue.
+* ETA (minutes) = `position * avgConsultMinutes + doctor.lateByMinutes`.
+
+  * `avgConsultMinutes` stored on Doctor model; default = 12.
+  * `lateByMinutes` is applied when doctor marks themselves late.
+
+This method is deterministic and explainable. It is easy to improve later (e.g., incorporate historical consult durations, no-shows, or machine learning estimates).
+
+---
+
+## Broadcasts — placement & behavior
+
+* Broadcasts are invoked in controllers **after** DB operations complete. That ensures events reflect committed state.
+* Emissions are wrapped in `try/catch` and are best-effort; failures don’t break HTTP responses.
+* Typical events emitted after operations:
+
+  * After `createAppointment`: `queue:state` (doctor room) + `queue:update` (appointment room).
+  * After `updateAppointmentStatus` or cancellation: same as above.
+  * After `updateDoctorStatus`: `doctor:status` + `queue:state`.
+
+---
+
+## Admin onboarding & security model
+
+* **Seed admin**: `scripts/seedAdmin.js` creates the first admin (run once). Do not commit secrets used for seeding.
+* **Invite flow**: admins generate single-use, expiring invite tokens for additional admins/doctors. In production, send tokens via email.
+* **Public registration** is limited to patients; admin creation is disabled on the public route.
+* **Protect admin endpoints** using `protect` + `authorize('admin')` middleware.
+
+Operational recommendations:
+
+* Use email verification for invites.
+* Log invite creation and admin actions for audit.
+* Enforce MFA for admin accounts in production.
+
+---
+
+## Testing checklist (Postman)
+
+Create a Postman environment with `BASE_URL`, `TOKEN`, `DOCTOR_ID`, `APPOINTMENT_ID`, `INVITE_TOKEN`.
+
+Flow:
+
+1. Register patient → login → save token.
+2. Seed/create admin or create invite via an admin account.
+3. Create a doctor (admin credentials required) → save `DOCTOR_ID`.
+4. As patient, create appointment using `DOCTOR_ID` → save `APPOINTMENT_ID`.
+5. Verify `GET /api/queue/appointment/:id/position` returns `position` and `etaMinutes`.
+6. Start Socket.IO client, `queue:subscribe` and verify `queue:state`/`queue:update`/`turn:now` on mutations.
+
+Export the Postman collection to `docs/postman_collection.json` for repeatable tests.
+
+---
+
+## Deployment & production notes
+
+* Use managed secrets (AWS Secrets Manager / Azure Key Vault). Don’t store `.env` in the repo.
+* For horizontal scaling of Socket.IO, use a Redis adapter or managed Pub/Sub and sticky sessions.
+* Add monitoring/alerts for failed broadcasts, high error rates, and suspicious auth behavior.
+* Consider short access tokens + refresh tokens, and SSO for enterprise admin provisioning.
+
+---
+
+## Pre-push checklist
+
+1. Ensure `.gitignore` excludes `node_modules/`, `.env`, and log files.
+2. Commit `.env.example` (no secrets).
+3. Verify no secrets are present in staged commits (`git grep JWT_SECRET || true`).
+4. Run `npm ci` and any tests/linting scripts.
+5. Commit and push to remote.
+
+If a secret has been pushed previously, rotate it immediately and purge the history using `git filter-repo` or BFG.
+
+---
+
 
 ---
 
@@ -283,6 +318,6 @@ Body: {"name":"Test","email":"test@example.com","password":"secret123"}
 
 MIT — Samuel Mensah Quaye
 
-If you want, I can now:
+---
 
 

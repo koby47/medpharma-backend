@@ -8,6 +8,7 @@ import doctorRoutes from "./routes/doctors.js";
 import appointmentRoutes from "./routes/appointments.js";
 import authRoutes from "./routes/auth.js";
 import queueRoutes from "./routes/queue.js";
+import adminRoutes from "./routes/admin.js";
 
 import { initIO } from "./sockets/io.js";
 import queueSocket from "./sockets/queueSocket.js";
@@ -24,6 +25,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/doctors", doctorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/queue", queueRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/", (_req, res) => res.json({ message: "MedPharma API is running..." }));
 
