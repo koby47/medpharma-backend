@@ -1,5 +1,9 @@
+import "dotenv/config";                // loads .env immediately, before other imports
+// DEBUG: remove after verification
+console.log("JWT_SECRET present?", !!process.env.JWT_SECRET);
+console.log("Loaded .env from", process.cwd());
+
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 import http from "http";
 
@@ -13,7 +17,7 @@ import adminRoutes from "./routes/admin.js";
 import { initIO } from "./sockets/io.js";
 import queueSocket from "./sockets/queueSocket.js";
 
-dotenv.config();
+
 await connectDB();
 
 const app = express();
