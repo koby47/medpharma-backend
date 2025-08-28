@@ -33,7 +33,7 @@ app.use("/api/admin", adminRoutes);
 
 app.get("/", (_req, res) => res.json({ message: "MedPharma API is running..." }));
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5050;
 
 // http + socket
 const server = http.createServer(app);
